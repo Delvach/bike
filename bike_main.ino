@@ -19,6 +19,31 @@
 
 #define MAX_BRIGHTNESS  32 // set max brightness
 
+
+# prototype light mapping
+
+#define FORK_TOP_LENGTH 9
+#define FORK_SIDE_LENGTH 18
+#define FORK_BOTTOM_LENGTH 4
+#define FORK_FRONT_LENGTH 18
+
+#define FORK_RIGHT_TOP_INDEX 0
+#define FORK_RIGHT_SIDE_INDEX 9
+#define FORK_RIGHT_BOTTOM_INDEX 27
+#define FORK_RIGHT_FRONT_INDEX 31
+
+#define FORK_LEFT_TOP_INDEX 89
+#define FORK_LEFT_SIDE_INDEX 71
+#define FORK_LEFT_BOTTOM_INDEX 67
+#define FORK_LEFT_FRONT_INDEX 49
+
+
+
+
+
+
+
+
 Adafruit_NeoPixel frontstrip = Adafruit_NeoPixel(FRONT_STRIP_NUM, FRONT_STRIP_PIN, FRONT_STRIP_NEO_PTYPE + NEO_KHZ800);
 
 Adafruit_NeoMatrix backlightmatrix = Adafruit_NeoMatrix(8, 8, BACK_LIGHT_PIN,
