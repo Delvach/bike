@@ -30,10 +30,12 @@
 
 #define LWAIT    50
 
-#define MAX_BRIGHTNESS  32 // set max brightness
+#define MAX_BRIGHTNESS  64 // set max brightness
 
 
 // prototype light mapping
+#define HANDLEBAR_LENGTH HANDLEBAR_STRIP_NUM/2
+#define HANDLBAR_CIRCLE_LENGTH HANDLEBAR_CIRCLE_NUM/2
 
 #define FORK_TOP_LENGTH 9
 #define FORK_SIDE_LENGTH 18
@@ -54,25 +56,43 @@
 
 
 
+// SPECTRUM ANALYZER
+#define SPECTRUMSHIELD_PIN_STROBE 4
+#define SPECTRUMSHIELD_PIN_RESET 5
+#define SPECTRUMSHIELD_PIN_LEFT 0 //analog
+#define SPECTRUMSHIELD_PIN_RIGHT 1 //analog
+
+int left[7]; 
+int right[7];
+
 
 
 
 Adafruit_NeoPixel frontforkstrip = Adafruit_NeoPixel(FRONT_STRIP_NUM, FORK_STRIP_PIN, WRGB_NEO_PTYPE + NEO_KHZ800);
 Adafruit_NeoPixel handlebarstrip = Adafruit_NeoPixel(HANDLEBAR_STRIP_NUM, HANDLEBAR_STRIP_PIN, WRGB_NEO_PTYPE + NEO_KHZ800);
-Adafruit_NeoPixel handlebarcircle = Adafruit_NeoPixel(HANDLEBAR_CIRCLE_NUM, HANDLEBAR_CIRCLE_PIN, RGB_NEO_PTYPE + NEO_KHZ800);
+//Adafruit_NeoPixel handlebarcircle = Adafruit_NeoPixel(HANDLEBAR_CIRCLE_NUM, HANDLEBAR_CIRCLE_PIN, RGB_NEO_PTYPE + NEO_KHZ800);
 
-Adafruit_NeoMatrix backlightmatrix = Adafruit_NeoMatrix(8, 8, BACK_LIGHT_PIN,
-  NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
-  NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
-  NEO_GRB            + NEO_KHZ800);
+//Adafruit_NeoMatrix backlightmatrix = Adafruit_NeoMatrix(8, 8, BACK_LIGHT_PIN,
+//  NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
+//  NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
+//  NEO_GRB            + NEO_KHZ800);
 
 
+/*
+ * 0 - default
+ * 
+ */
+byte mode = 0;
 
 uint32_t _RED = frontforkstrip.Color(64, 0, 0, 0);
 uint32_t _GREEN = frontforkstrip.Color(0, 127, 0, 0);
 uint32_t _BLACK = frontforkstrip.Color(0, 0, 0, 0);
 uint32_t _PURPLE = frontforkstrip.Color(127, 0, 127, 0);
 uint32_t _WHITE = frontforkstrip.Color(0, 0, 0, 127);
+
+#define MINPOWER 128
+#define MAXPOWER 1023
+
 
 #define WAITTIME 350
 
@@ -90,92 +110,175 @@ void setup() {
 //  backlightmatrix.setBrightness(MAX_BRIGHTNESS);
 //  backlightmatrix.show();
 
-  handlebarcircle.begin();
-  handlebarcircle.setBrightness(MAX_BRIGHTNESS);
-  handlebarcircle.show();
+//  handlebarcircle.begin();
+//  handlebarcircle.setBrightness(MAX_BRIGHTNESS);
+//  handlebarcircle.show();
 
   handlebarstrip.begin();
   handlebarstrip.setBrightness(MAX_BRIGHTNESS);
   handlebarstrip.show();
 
+  //initialize eq
+  pinMode(SPECTRUMSHIELD_PIN_RESET, OUTPUT); // reset
+  pinMode(SPECTRUMSHIELD_PIN_STROBE, OUTPUT); // strobe
+  digitalWrite(SPECTRUMSHIELD_PIN_RESET,LOW); // reset low
+  digitalWrite(SPECTRUMSHIELD_PIN_STROBE,HIGH); //pin 5 is RESET on the shield
+
   setForkRightBottom(_PURPLE);
   setForkLeftBottom(_PURPLE);
 
-  setHandlebarStrip(_PURPLE);
+//  setHandlebarStrip(_PURPLE);
 
-  setHandlebarCircle(handlebarcircle.Color(127, 0, 127));
+//  setHandlebarCircle(handlebarcircle.Color(127, 0, 127));
 
   timeCurrent = millis();
 
+
+  
 
   FrontFork_Animation.start(1);
 }
 
 void loop() {
+  readSpectrum();
+
+  setSpectrum_handlebarLeft(left[1], left[1]);
+  setSpectrum_forkFrontLeft(left[2], left[3]);
+  setSpectrum_forkSideLeft(left[4], left[5]);
+  setSpectrum_forkTopLeft(left[5]);
+
+  setSpectrum_handlebarRight(right[1], right[1]);
+  setSpectrum_forkFrontRight(right[2], right[3]);
+  setSpectrum_forkSideRight(right[4], right[5]);
+  setSpectrum_forkTopRight(right[5]);
 
   
+//  setForkLeftTopPixel
+
+//  setSpectrum_circleLeft(left[6]);
 
   unsigned long timeDiff = millis() - timeCurrent;
   timeCurrent = millis();
-
+  
 //  testForkAreas();
-
 //  testForkScroll();
-
-testFork();
-
-
-
-   if(FrontFork_Animation.isActive() && FrontFork_Animation.execute()) {
-    
-   }
-
-  /*
-  colorWipe(frontforkstrip.Color(150,0,0,0), LWAIT);
-  // Fade off with reducing brightness
-  fadeOff(LWAIT);
-  frontforkstrip.clear(); // turn all pixels off
-  frontforkstrip.setBrightness(MAX_BRIGHTNESS); // restore max brightness value
-
-  // Moderately bright green color.
-  colorWipe(frontforkstrip.Color(0,150,0,0), LWAIT);
-  // Fade off with reducing brightness
-  fadeOff(LWAIT);
-  frontforkstrip.clear(); // turn all pixels off
-  frontforkstrip.setBrightness(MAX_BRIGHTNESS); // restore max brightness value
+//testFork();
+//   if(FrontFork_Animation.isActive() && FrontFork_Animation.execute()) {
+//    
+//   }
 
   
-  colorWipe(frontforkstrip.Color(0,0,150,0), LWAIT);
-  // Fade off with reducing brightness
-  fadeOff(LWAIT);
-  frontforkstrip.clear(); // turn all pixels off
-  frontforkstrip.setBrightness(MAX_BRIGHTNESS); // restore max brightness value
-
-  // Moderately bright cyan color.
-  colorWipe(frontforkstrip.Color(0,150,150,0), LWAIT);
-  // Fade off with reducing brightness
-  fadeOff(LWAIT);
-  frontforkstrip.clear(); // turn all pixels off
-  frontforkstrip.setBrightness(MAX_BRIGHTNESS); // restore max brightness value
-
-  // Moderately bright purple color.
-  colorWipe(frontforkstrip.Color(150,0,150,0), LWAIT);
-  // Fade off with reducing brightness
-  fadeOff(LWAIT);
-  frontforkstrip.clear(); // turn all pixels off
-  frontforkstrip.setBrightness(MAX_BRIGHTNESS); // restore max brightness value
-
-
-    colorWipe(frontforkstrip.Color(0,0,0,150), LWAIT);
-
-  // Fade off with reducing brightness
-  fadeOff(LWAIT);
-  frontforkstrip.clear(); // turn all pixels off
-  frontforkstrip.setBrightness(MAX_BRIGHTNESS);
-  */
 
   
 }
+
+void setSpectrum_forkTopLeft(int value) {
+  int index = getNumLEDsFromValue(value, FORK_TOP_LENGTH);
+
+  byte i;
+  for(i = 0; i < FORK_TOP_LENGTH; i++) {
+    uint32_t color = i < index ? _RED : _BLACK;
+    setForkLeftTopPixel(i, color);
+  }
+  
+  
+}
+
+void setSpectrum_forkTopRight(int value) {
+  int index = getNumLEDsFromValue(value, FORK_TOP_LENGTH);
+
+  byte i;
+  for(i = 0; i < FORK_TOP_LENGTH; i++) {
+    uint32_t color = i < index ? _RED : _BLACK;
+    setForkRightTopPixel(i, color);
+  }
+}
+
+  
+  
+
+
+void setSpectrum_handlebarLeft(int value1, int value2) {
+  int index = getNumLEDsFromValue(value1, HANDLEBAR_LENGTH);
+  
+  byte i;
+  for(i = 0; i < HANDLEBAR_LENGTH; i++) {
+    uint32_t color = i <= index ? _RED : _BLACK;
+    setHandlebarStripLeftPixel(i, color);
+  }
+}
+
+void setSpectrum_handlebarRight(int value1, int value2) {
+  int index = getNumLEDsFromValue(value1, HANDLEBAR_LENGTH);
+  
+  byte i;
+  for(i = 0; i < HANDLEBAR_LENGTH; i++) {
+    uint32_t color = i <= index ? _RED : _BLACK;
+    setHandlebarStripRightPixel(i, color);
+  }
+}
+
+void setSpectrum_forkFrontLeft(int value1, int value2) {
+  int index = getNumLEDsFromValue(value1, FORK_FRONT_LENGTH);
+  
+  byte i;
+  for(i = 0; i < FORK_FRONT_LENGTH; i++) {
+    uint32_t color = i < index ? _PURPLE : _BLACK;
+    setForkLeftFrontPixel(i, color);
+  }
+}
+
+void setSpectrum_forkFrontRight(int value1, int value2) {
+  int index = getNumLEDsFromValue(value1, FORK_FRONT_LENGTH);
+  
+  byte i;
+  for(i = 0; i < FORK_FRONT_LENGTH; i++) {
+    uint32_t color = i < index ? _PURPLE : _BLACK;
+    setForkRightFrontPixel(i, color);
+  }
+}
+
+void setSpectrum_forkSideLeft(int value1, int value2) {
+  int index = getNumLEDsFromValue(value1, FORK_SIDE_LENGTH);
+  
+  byte i;
+  for(i = 0; i < FORK_SIDE_LENGTH; i++) {
+    uint32_t color = i < index ? _GREEN : _BLACK;
+    setForkLeftSidePixel(i, color);
+  }
+}
+
+void setSpectrum_forkSideRight(int value1, int value2) {
+  int index = getNumLEDsFromValue(value1, FORK_SIDE_LENGTH);
+  
+  byte i;
+  for(i = 0; i < FORK_SIDE_LENGTH; i++) {
+    uint32_t color = i < index ? _GREEN : _BLACK;
+    setForkRightSidePixel(i, color);
+  }
+}
+
+
+
+void setSpectrum_circleLeft(int value) {
+  int index = getNumLEDsFromValue(value, HANDLBAR_CIRCLE_LENGTH);
+
+  byte i;
+  for(i = 0; i < HANDLBAR_CIRCLE_LENGTH; i++) {
+    uint32_t color = i < index ? _GREEN : _BLACK;
+    setHandlebarCircleLeftPixel(i, color);
+  }
+}
+
+
+
+
+
+
+
+
+
+
 
 // Index is 0-17 (18 total) from top to bottom
 void setForkFrontPixel(uint16_t index, uint32_t color) {
@@ -302,6 +405,34 @@ void testForkAreas() {
   
 }
 
+
+
+void setForkLeftTopPixel(uint16_t displayIndex, uint32_t color) {
+  uint16_t index_start = FORK_LEFT_TOP_INDEX;
+  uint16_t index_end = FORK_LEFT_TOP_INDEX + FORK_TOP_LENGTH;
+
+  uint16_t dIndex = 0;
+  for(uint16_t i = index_start; i < index_end; i++) {
+    uint32_t c = (displayIndex < dIndex++) ? color : _BLACK;
+    frontforkstrip.setPixelColor(i, c);
+  }
+  frontforkstrip.show();
+}
+
+void setForkRightTopPixel(uint16_t displayIndex, uint32_t color) {
+  uint16_t index_start = FORK_RIGHT_TOP_INDEX;
+  uint16_t index_end = FORK_RIGHT_TOP_INDEX + FORK_TOP_LENGTH;
+
+  uint16_t dIndex = 0;
+  for(uint16_t i = index_start; i < index_end; i++) {
+    uint32_t c = (displayIndex < dIndex++) ? color : _BLACK;
+    frontforkstrip.setPixelColor(i, c);
+  }
+  frontforkstrip.show();
+}
+
+
+
 void setForkRightTop(uint32_t color) {
   uint16_t index_start = FORK_RIGHT_TOP_INDEX;
   uint16_t index_end = FORK_RIGHT_TOP_INDEX + FORK_TOP_LENGTH;
@@ -383,19 +514,28 @@ void setForkLeftFront(uint32_t color) {
 }
 
 
-void setHandlebarCircle(uint32_t color) {
-  for(uint16_t i=0; i<handlebarcircle.numPixels(); i++) {
-    handlebarcircle.setPixelColor(i, color);
-  }
-
-  handlebarcircle.show();
+void setHandlebarCircleLeftPixel(uint16_t index, uint32_t color) {
+  // Need to map left/right logic
 }
 
-void setHandlebarCirclePixel(uint16_t index, uint32_t color) {
-  handlebarcircle.setPixelColor(index, color);
-
-  handlebarcircle.show();
+void setHandlebarCircleRightPixel(uint16_t index, uint32_t color) {
+  
 }
+
+//
+//void setHandlebarCircle(uint32_t color) {
+//  for(uint16_t i=0; i<handlebarcircle.numPixels(); i++) {
+//    handlebarcircle.setPixelColor(i, color);
+//  }
+//
+////  handlebarcircle.show();
+//}
+
+//void setHandlebarCirclePixel(uint16_t index, uint32_t color) {
+//  handlebarcircle.setPixelColor(index, color);
+//
+//  handlebarcircle.show();
+//}
 
 
 void setHandlebarStrip(uint32_t color) {
@@ -433,7 +573,46 @@ void setHandlebarStripLeftPixel(uint16_t index, uint32_t color) {
 }
 
 
-// handlebarstrip
+void readSpectrum() {
+  //reset the data
+  digitalWrite(SPECTRUMSHIELD_PIN_RESET, HIGH);
+  digitalWrite(SPECTRUMSHIELD_PIN_RESET, LOW);
+  
+  //loop thru all 7 bands
+  for(int band=0; band < 7; band++) {
+    digitalWrite(SPECTRUMSHIELD_PIN_STROBE,LOW); // go to the next band 
+    delayMicroseconds(50); //gather some data
+    left[band] = analogRead(SPECTRUMSHIELD_PIN_LEFT); // store left band reading
+    right[band] = analogRead(SPECTRUMSHIELD_PIN_RIGHT); // store right band reading
+    digitalWrite(SPECTRUMSHIELD_PIN_STROBE,HIGH); // reset the strobe pin
+  }
+}
+
+int getNumLEDsFromValue(int powerValue, int numLedsInSegment) {
+  return map(powerValue, MINPOWER, MAXPOWER, 0, numLedsInSegment);
+}
+
+int getBrightnessFromValue(int powerValue) {
+  return map(powerValue, MINPOWER, MAXPOWER, 0, MAX_BRIGHTNESS);
+}
+
+uint32_t getColorFromValue(int powerValue, boolean isRGBW) {
+  switch(mode) {
+    case 0: default:
+
+      break;
+  }
+}
+
+
+void clearAll() {
+  frontforkstrip.clear();
+  handlebarstrip.clear();
+//  handlebarcircle.clear();
+
+}
+
+
 
 // Fill the dots one after the other with a color
 void colorWipe(uint32_t c, uint16_t wait) {
@@ -444,7 +623,7 @@ void colorWipe(uint32_t c, uint16_t wait) {
   }
 }
 
-// Fade off with reducing brightness
+// Fade off with reducing brightness - bad way to do this, setBrightness() is meant for setup
 void fadeOff(uint16_t wait) {
   byte brightness;
   while ((brightness = frontforkstrip.getBrightness()) > 0) {
@@ -453,3 +632,7 @@ void fadeOff(uint16_t wait) {
     delay(wait); // Delay for a period of time (in milliseconds).
   }
 }
+
+
+
+
