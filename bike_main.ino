@@ -27,10 +27,13 @@
 #define HANDLEBAR_STRIP_PIN 10
 #define HANDLEBAR_STRIP_NUM 36
 
+#define MEGAMATRIX_PIN 11
+
+
 
 #define LWAIT    50
 
-#define MAX_BRIGHTNESS  64 // set max brightness
+#define MAX_BRIGHTNESS  15 // set max brightness
 
 
 // prototype light mapping
@@ -53,9 +56,6 @@
 #define FORK_LEFT_FRONT_INDEX 80
 
 
-
-
-
 // SPECTRUM ANALYZER
 #define SPECTRUMSHIELD_PIN_STROBE 4
 #define SPECTRUMSHIELD_PIN_RESET 5
@@ -65,58 +65,123 @@
 int left[7]; 
 int right[7];
 
-
-
-
 Adafruit_NeoPixel frontforkstrip = Adafruit_NeoPixel(FRONT_STRIP_NUM, FORK_STRIP_PIN, WRGB_NEO_PTYPE + NEO_KHZ800);
 Adafruit_NeoPixel handlebarstrip = Adafruit_NeoPixel(HANDLEBAR_STRIP_NUM, HANDLEBAR_STRIP_PIN, WRGB_NEO_PTYPE + NEO_KHZ800);
-//Adafruit_NeoPixel handlebarcircle = Adafruit_NeoPixel(HANDLEBAR_CIRCLE_NUM, HANDLEBAR_CIRCLE_PIN, RGB_NEO_PTYPE + NEO_KHZ800);
+Adafruit_NeoPixel handlebarcircle = Adafruit_NeoPixel(HANDLEBAR_CIRCLE_NUM, HANDLEBAR_CIRCLE_PIN, RGB_NEO_PTYPE + NEO_KHZ800);
 
-//Adafruit_NeoMatrix backlightmatrix = Adafruit_NeoMatrix(8, 8, BACK_LIGHT_PIN,
-//  NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
-//  NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
-//  NEO_GRB            + NEO_KHZ800);
+Adafruit_NeoMatrix backlightmatrix = Adafruit_NeoMatrix(8, 8, BACK_LIGHT_PIN,
+  NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
+  NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
+  NEO_GRB            + NEO_KHZ800);
 
+Adafruit_NeoMatrix megaMatrix = Adafruit_NeoMatrix(32, 8, MEGAMATRIX_PIN,  NEO_MATRIX_TOP + NEO_MATRIX_LEFT + NEO_MATRIX_COLUMNS + NEO_MATRIX_ZIGZAG, NEO_GRB + NEO_KHZ800);
+
+int colStr = 191;
+
+/* COLOR DEFINITIONS */
+const uint16_t rgb_colors[] = {
+  megaMatrix.Color(colStr, 0, 0),
+  megaMatrix.Color(colStr, colStr, 0),
+  megaMatrix.Color(colStr, 0, colStr),
+  megaMatrix.Color(0, colStr, 0),
+  megaMatrix.Color(0, 0, colStr),
+  megaMatrix.Color(0, colStr, colStr),
+  
+  megaMatrix.Color(colStr,0,  colStr/2),
+  megaMatrix.Color(colStr, colStr, colStr)
+  };
+
+const uint16_t RGB_RED = megaMatrix.Color(colStr, 0, 0);
+const uint16_t RGB_GREEN = megaMatrix.Color(0, colStr, 0);
+const uint16_t RGB_BLUE = megaMatrix.Color(0, 0, colStr);
+const uint16_t RGB_PURPLE = megaMatrix.Color(colStr, colStr, 0);
+const uint16_t RGB_BLACK = megaMatrix.Color(0, 0, 0);
+const uint16_t RGB_WHITE = megaMatrix.Color(colStr, colStr, colStr);
+
+
+
+
+
+
+/* Options that will eventually be controlled via touchscreen and/or physical controls */
+boolean use_audio = true;
+int msDelaySpectrumUpdate = 5;
+boolean cycleColors = false;
 
 /*
  * 0 - default
  * 
  */
-byte mode = 0;
+byte mode = 1;
 
-uint32_t _RED = frontforkstrip.Color(64, 0, 0, 0);
-uint32_t _GREEN = frontforkstrip.Color(0, 127, 0, 0);
+int COLOR_STRENGTH = 128;
+
+const int RGBW_STRENGTH = 64;
+uint32_t _RED = frontforkstrip.Color(COLOR_STRENGTH/2, 0, 0, 0);
+uint32_t _GREEN = frontforkstrip.Color(0, COLOR_STRENGTH, 0, 0);
 uint32_t _BLACK = frontforkstrip.Color(0, 0, 0, 0);
-uint32_t _PURPLE = frontforkstrip.Color(127, 0, 127, 0);
-uint32_t _WHITE = frontforkstrip.Color(0, 0, 0, 127);
+uint32_t _PURPLE = frontforkstrip.Color(COLOR_STRENGTH, 0, COLOR_STRENGTH, 0);
+uint32_t _WHITE = frontforkstrip.Color(0, 0, 0, COLOR_STRENGTH);
+
+const uint32_t rgbw_blue = frontforkstrip.Color(0, 0, COLOR_STRENGTH, 0);
+const uint32_t rgbw_white = frontforkstrip.Color(0, 0, 0, RGBW_STRENGTH);
 
 #define MINPOWER 128
 #define MAXPOWER 1023
 
-
-#define WAITTIME 350
+#define TEXT_SCROLL_DELAY 25
 
 unsigned long timeCurrent;
+unsigned long timeLastCircleEvent = 0;
+unsigned long timeBetweenCircleEvents = 1000;
+const long maxTotalSpectrumValue = 14322;
 
-Animation FrontFork_Animation = Animation(18, 20);
+//Animation FrontFork_Animation = Animation(18, 20);
+
+boolean useMegaMatrix = true;
+boolean useFrontCircle = true;
+boolean useBacklightMatrix = false;
+
+
+// HSV library imports
+int ihue = 0;        //-HUE (0-360)
+int ibright = 0;     //-BRIGHTNESS (0-255)
+int isat = 0;        //-SATURATION (0-255)
+
+int ledsX[256][3];
+
 
 
 void setup() {
+  Serial.begin(9600);
+  
   frontforkstrip.begin();
   frontforkstrip.setBrightness(MAX_BRIGHTNESS);
   frontforkstrip.show();
+
+  if(useBacklightMatrix) {
+    backlightmatrix.begin();
+    backlightmatrix.setBrightness(MAX_BRIGHTNESS);
+    backlightmatrix.show();
+  }
+
+  if(useFrontCircle) {
+    handlebarcircle.begin();
+    handlebarcircle.setBrightness(MAX_BRIGHTNESS);
+    handlebarcircle.show();
+  }
   
-//  backlightmatrix.begin();
-//  backlightmatrix.setBrightness(MAX_BRIGHTNESS);
-//  backlightmatrix.show();
-
-//  handlebarcircle.begin();
-//  handlebarcircle.setBrightness(MAX_BRIGHTNESS);
-//  handlebarcircle.show();
-
   handlebarstrip.begin();
   handlebarstrip.setBrightness(MAX_BRIGHTNESS);
   handlebarstrip.show();
+
+  if(useMegaMatrix) {
+    megaMatrix.begin();
+    megaMatrix.setTextWrap(false);
+    megaMatrix.setBrightness(MAX_BRIGHTNESS);
+    megaMatrix.setTextColor(rgb_colors[0]);
+    megaMatrix.show();
+  }
 
   //initialize eq
   pinMode(SPECTRUMSHIELD_PIN_RESET, OUTPUT); // reset
@@ -124,78 +189,159 @@ void setup() {
   digitalWrite(SPECTRUMSHIELD_PIN_RESET,LOW); // reset low
   digitalWrite(SPECTRUMSHIELD_PIN_STROBE,HIGH); //pin 5 is RESET on the shield
 
-  setForkRightBottom(_PURPLE);
-  setForkLeftBottom(_PURPLE);
+  setForkRightBottom(frontforkstrip.Color(0, 0, 0, 255));
+  setForkLeftBottom(frontforkstrip.Color(0, 0, 0, 255));
 
 //  setHandlebarStrip(_PURPLE);
-
-//  setHandlebarCircle(handlebarcircle.Color(127, 0, 127));
+  if(useFrontCircle) {
+    setHandlebarCircleAllPixels(handlebarcircle.Color(COLOR_STRENGTH, 0, COLOR_STRENGTH));
+  }
 
   timeCurrent = millis();
 
 
   
 
-  FrontFork_Animation.start(1);
+//  FrontFork_Animation.start(1);
+  initializeColorWheel();
 }
 
+int x    = megaMatrix.width();
+int pass = 0;
+
 void loop() {
-  readSpectrum();
+  if(use_audio) readSpectrum();
 
-  setSpectrum_handlebarLeft(left[1], left[1]);
-  setSpectrum_forkFrontLeft(left[2], left[3]);
-  setSpectrum_forkSideLeft(left[4], left[5]);
-  setSpectrum_forkTopLeft(left[5]);
+  switch(mode) {
+    case 0: default:
+      if(use_audio) {
+//        setSpectrum_handlebarLeft(left[1], left[1]);
+//        setSpectrum_forkFrontLeft(left[2], left[3]);
+//        setSpectrum_forkSideLeft(left[4], left[5]);
+//        setSpectrum_forkTopLeft(left[5]);
+//      
+//        setSpectrum_handlebarRight(right[1], right[1]);
+//        setSpectrum_forkFrontRight(right[2], right[3]);
+//        setSpectrum_forkSideRight(right[4], right[5]);
+//        setSpectrum_forkTopRight(right[5]);
+      }
+      
+      break;
 
-  setSpectrum_handlebarRight(right[1], right[1]);
-  setSpectrum_forkFrontRight(right[2], right[3]);
-  setSpectrum_forkSideRight(right[4], right[5]);
-  setSpectrum_forkTopRight(right[5]);
+     case 1:
+        if(use_audio) {
+          updateMegaMatrixWithAudio();
+          updateFrontForksWithAudio();
+          delay(msDelaySpectrumUpdate);
+        }
+        break;
 
-  
-//  setForkLeftTopPixel
+      case 2:
+        megaMatrix.fillScreen(0);
+        megaMatrix.setCursor(x, 0);
+        megaMatrix.print(F("Happy Thursday"));
+        if(--x < -96) {
+          x = megaMatrix.width();
+          if(++pass >= 3) pass = 0;
+          megaMatrix.setTextColor(rgb_colors[pass]);
+        }
+        megaMatrix.show();
+        delay(TEXT_SCROLL_DELAY);
 
-//  setSpectrum_circleLeft(left[6]);
+      break;
+
+      case 3:
+        testMatrix();
+        break;
+
+      case 4:
+        randomFill();
+        break;
+
+      case 5:
+        sparkle();
+        break;
+
+      case 6:
+
+        break;
+  }
 
   unsigned long timeDiff = millis() - timeCurrent;
   timeCurrent = millis();
-  
-//  testForkAreas();
-//  testForkScroll();
-//testFork();
-//   if(FrontFork_Animation.isActive() && FrontFork_Animation.execute()) {
-//    
-//   }
 
-  
+  if((millis() - timeLastCircleEvent) >= timeBetweenCircleEvents) {
+    
+    // Trigger circle event
+    cycleFrontCircleRainbow();
+    
 
-  
-}
-
-void setSpectrum_forkTopLeft(int value) {
-  int index = getNumLEDsFromValue(value, FORK_TOP_LENGTH);
-
-  byte i;
-  for(i = 0; i < FORK_TOP_LENGTH; i++) {
-    uint32_t color = i < index ? _RED : _BLACK;
-    setForkLeftTopPixel(i, color);
+    // Recalculate time until next event
+    int currentSpectrumValue;
+    for(byte i = 0; i < 7; i++) {
+      currentSpectrumValue += left[i];
+      currentSpectrumValue += right[i];
+    }
+    timeBetweenCircleEvents = map(currentSpectrumValue, 0, maxTotalSpectrumValue, 60000, 10);
+    timeLastCircleEvent = millis();
   }
   
+
+  
   
 }
 
-void setSpectrum_forkTopRight(int value) {
-  int index = getNumLEDsFromValue(value, FORK_TOP_LENGTH);
 
-  byte i;
-  for(i = 0; i < FORK_TOP_LENGTH; i++) {
-    uint32_t color = i < index ? _RED : _BLACK;
-    setForkRightTopPixel(i, color);
+/**************************************************************
+ * 
+ *  Spectrum Analyzer & LED integration 
+ *  v0.1 - Basic audio integration
+ * 
+ *************************************************************/
+
+void testMatrix() {
+  int x;
+  int y;
+  for(x = 0; x < 32; x++) {
+    megaMatrix.fillScreen(megaMatrix.Color(0, 0, 0));
+    for(y = 0; y < 8; y++) {
+      megaMatrix.drawPixel(x, y, megaMatrix.Color(0, 0, 255));
+    }
+    
+    
+//    megaMatrix.drawPixel(0, 0, megaMatrix.Color(x, 0, 0));
+    megaMatrix.show();
+    delay(20);
   }
+  
 }
 
-  
-  
+void randomFill() {
+  int x, y, c;
+  x = random(0, 32);
+  y = random(0, 8);
+  c = random(0, 7);
+  megaMatrix.drawPixel(x, y, rgb_colors[c]);
+  megaMatrix.show();
+}
+
+void sparkle() {
+  int x;
+  int y;
+  int c;
+  for(x = 0; x < 32; x++) {
+    for(y = 0; y < 8; y++) {
+      c = random(0, 7);
+      megaMatrix.drawPixel(x, y, rgb_colors[c]);
+    }
+    
+    
+//    megaMatrix.drawPixel(0, 0, megaMatrix.Color(x, 0, 0));
+    
+    
+  }
+  megaMatrix.show();
+}
 
 
 void setSpectrum_handlebarLeft(int value1, int value2) {
@@ -218,7 +364,25 @@ void setSpectrum_handlebarRight(int value1, int value2) {
   }
 }
 
-void setSpectrum_forkFrontLeft(int value1, int value2) {
+
+void setSpectrum_circleLeft(int value) {
+  int index = getNumLEDsFromValue(value, HANDLBAR_CIRCLE_LENGTH);
+
+  byte i;
+  for(i = 0; i < HANDLBAR_CIRCLE_LENGTH; i++) {
+    uint32_t color = i < index ? _GREEN : _BLACK;
+    setHandlebarCircleLeftPixel(i, color);
+  }
+}
+
+
+/**************************************************************
+ * 
+ *  Spectrum Analyzer & LED integration 
+ *  v0.2 - Audio to MegaMatrix
+ *  
+ *  
+ *  void setSpectrum_forkFrontLeft(int value1, int value2) {
   int index = getNumLEDsFromValue(value1, FORK_FRONT_LENGTH);
   
   byte i;
@@ -238,47 +402,188 @@ void setSpectrum_forkFrontRight(int value1, int value2) {
   }
 }
 
-void setSpectrum_forkSideLeft(int value1, int value2) {
-  int index = getNumLEDsFromValue(value1, FORK_SIDE_LENGTH);
+ *  
+ * 
+ *************************************************************/
+
+void updateFrontForksWithAudio() {
+  int leftValue, rightValue, index;
+  uint32_t leftColor, rightColor;
+
+  leftValue = map(left[2], 0, 1023, 0, FORK_FRONT_LENGTH);
+  rightValue = map(right[2], 0, 1023, 0, FORK_FRONT_LENGTH);
   
-  byte i;
-  for(i = 0; i < FORK_SIDE_LENGTH; i++) {
-    uint32_t color = i < index ? _GREEN : _BLACK;
-    setForkLeftSidePixel(i, color);
+  for(index = 0; index < FORK_FRONT_LENGTH; index++) {
+    leftColor = index < leftValue ? _PURPLE : _BLACK;
+    rightColor = index < rightValue ? _PURPLE : _BLACK;
+    setForkLeftFrontPixel(FORK_FRONT_LENGTH-index, leftColor);
+    setForkRightFrontPixel(FORK_FRONT_LENGTH-index, rightColor);
   }
-}
 
-void setSpectrum_forkSideRight(int value1, int value2) {
-  int index = getNumLEDsFromValue(value1, FORK_SIDE_LENGTH);
+  leftValue = map(left[4], 0, 1023, 0, FORK_SIDE_LENGTH);
+  rightValue = map(right[4], 0, 1023, 0, FORK_SIDE_LENGTH);
+
+  for(index = 0; index < FORK_SIDE_LENGTH; index++) {
+    leftColor = index < leftValue ? _RED : _BLACK;
+    rightColor = index < rightValue ? _RED : _BLACK;
+    setForkLeftSidePixel(FORK_SIDE_LENGTH-index, leftColor);
+    setForkRightSidePixel(FORK_SIDE_LENGTH-index, rightColor);
+  }
+
+
+  leftValue = map(left[5], MINPOWER, MAXPOWER, 0, HANDLEBAR_LENGTH);
+  rightValue = map(right[5], MINPOWER, MAXPOWER, 0, HANDLEBAR_LENGTH);
   
-  byte i;
-  for(i = 0; i < FORK_SIDE_LENGTH; i++) {
-    uint32_t color = i < index ? _GREEN : _BLACK;
-    setForkRightSidePixel(i, color);
+  for(index = 0; index < HANDLEBAR_LENGTH; index++) {
+    leftColor = index < leftValue ? rgbw_white : _BLACK;
+    rightColor = index < rightValue ? rgbw_white : _BLACK;
+    setHandlebarStripLeftPixel(index, leftColor);
+    setHandlebarStripRightPixel(index, rightColor);
   }
+
+  
+
+  leftValue = map(left[0], MINPOWER, MAXPOWER, 0, FORK_TOP_LENGTH);
+  rightValue = map(right[0], MINPOWER, MAXPOWER, 0, FORK_TOP_LENGTH);
+  
+
+  for(index = 0; index < FORK_TOP_LENGTH; index++) {
+    leftColor = index < leftValue ? _GREEN : _BLACK;
+    rightColor = index < rightValue ? _RED : _BLACK;
+    setForkLeftTopPixel(FORK_TOP_LENGTH-index, leftColor);
+    setForkRightTopPixel(FORK_TOP_LENGTH-index, rightColor);
+  }
+  
+  frontforkstrip.show();
+  handlebarstrip.show();
+
+  
 }
 
 
 
-void setSpectrum_circleLeft(int value) {
-  int index = getNumLEDsFromValue(value, HANDLBAR_CIRCLE_LENGTH);
 
-  byte i;
-  for(i = 0; i < HANDLBAR_CIRCLE_LENGTH; i++) {
-    uint32_t color = i < index ? _GREEN : _BLACK;
-    setHandlebarCircleLeftPixel(i, color);
+
+
+
+void updateMegaMatrixWithAudio() {
+  megaMatrix.fillScreen(megaMatrix.Color(0, 0, 0));
+  int column = 0;
+  int x = 0;
+  int channelStr;
+
+  boolean bassInside = false;
+
+  for(x = 0; x < 7; x++) {
+    channelStr = map(left[x], MINPOWER, MAXPOWER, 0, 9);
+//    setMegaMatrixColumnStr(bassInside ? 7-column++ : column++, channelStr, getColorByBandAndStrength(x, channelStr));
+//    setMegaMatrixColumnStr(bassInside ? 7-column++ : column++, channelStr, getColorByBandAndStrength(x, channelStr));
+    setMegaMatrixColumnHSV(column++, channelStr, x);
+    setMegaMatrixColumnHSV(column++, channelStr, x);
   }
+
+  column++;column++;column++;column++;
+
+  for(x = 0; x < 7; x++) {
+    channelStr = map(right[7-x], MINPOWER, MAXPOWER, 0, 9);
+//    setMegaMatrixColumnStr(column++, channelStr, getColorByBandAndStrength(6-x, channelStr));
+//    setMegaMatrixColumnStr(column++, channelStr, getColorByBandAndStrength(6-x, channelStr));
+    setMegaMatrixColumnHSV(column++, channelStr, 6-x);
+    setMegaMatrixColumnHSV(column++, channelStr, 6-x);
+  }
+
+  megaMatrix.show();
+  if(cycleColors) int off = getOffset(true);
+  
+}
+
+void setMegaMatrixColumnHSV(int column, int str, int band) {
+  int row;
+  uint16_t color;
+  for(row = 0; row < 8; row++) {
+    color = getColorByColumnRowStrength(band, row, str);
+    megaMatrix.drawPixel(column, 7-row, row < str ? color : RGB_BLACK);
+  }
+//  megaMatrix.show();
+  
+}
+
+int offset = 0;
+
+int getOffset(boolean updateThis) {
+  if(updateThis) {
+    if(offset == 359) {
+      offset = 0;
+    } else {
+      offset++;
+    }
+  }
+  return offset;
+}
+
+uint16_t getColorByColumnRowStrength(int column, int row, int strength) {
+  int thisColor[3];
+
+  int ihue = map(column, 0, 6, 0, 300);
+  int isat = map(strength, 0, 9, 0, 255);
+//  int ival = map(row, 0, 7, 240, 0); // probably reversed
+  int newHue = ihue;
+  
+  if(cycleColors) {
+    int off = getOffset(false);
+    int newHue = ihue + off;
+    if(newHue > 259) {
+      newHue = 360-newHue;
+    }
+  }
+
+  // hue: 0-359, sat: 0-255, val (lightness): 0-255
+  HSVtoRGB(newHue, 255, 255, thisColor);
+  return megaMatrix.Color(thisColor[0],thisColor[1],thisColor[2]);
+
+  
+}
+
+
+
+uint16_t getColorByBandAndStrength(int band, int strength) {
+  int thisColor[3];
+
+  int ihue = map(band, 0, 6, 0, 300);
+  int isat = map(strength, 0, 9, 0, 255);
+//  int ival = map(row, 0, 
+
+  // hue: 0-359, sat: 0-255, val (lightness): 0-255
+  HSVtoRGB(ihue, 255, isat, thisColor);
+  return megaMatrix.Color(thisColor[0],thisColor[1],thisColor[2]);
+
+  
+}
+
+uint16_t getColorByBand(int band) {
+  return rgb_colors[band];
 }
 
 
 
 
+void setMegaMatrixColumnStr(int column, int str, uint16_t color) {
+  int y;
+  
+  for(y = 0; y < 8; y++) {
+    megaMatrix.drawPixel(column, 7-y, y < str ? color : RGB_BLACK);
+  }
+  
+}
 
 
 
 
-
-
+/**************************************************************
+ * 
+ *  Front Fork
+ * 
+ *************************************************************/
 
 // Index is 0-17 (18 total) from top to bottom
 void setForkFrontPixel(uint16_t index, uint32_t color) {
@@ -291,144 +596,50 @@ void setForkFrontPixel(uint16_t index, uint32_t color) {
 void setForkLeftSidePixel(uint16_t index, uint32_t color) {
   uint16_t trueIndex = index + FORK_RIGHT_SIDE_INDEX;
   frontforkstrip.setPixelColor(trueIndex, color);
-  frontforkstrip.show();
+//  frontforkstrip.show();
 }
 
 void setForkLeftFrontPixel(uint16_t index, uint32_t color) {
   uint16_t trueIndex = (FORK_RIGHT_FRONT_INDEX + (FORK_FRONT_LENGTH - 1)) - index;
   frontforkstrip.setPixelColor(trueIndex, color);
-  frontforkstrip.show();
+//  frontforkstrip.show();
 }
 
 void setForkRightSidePixel(uint16_t index, uint32_t color) {
   uint16_t trueIndex = index + FORK_LEFT_SIDE_INDEX;
   frontforkstrip.setPixelColor(trueIndex, color);
-  frontforkstrip.show();
+//  frontforkstrip.show();
   
 }
 
 void setForkRightFrontPixel(uint16_t index, uint32_t color) {
   uint16_t trueIndex = (FORK_LEFT_FRONT_INDEX + (FORK_FRONT_LENGTH - 1)) - index;
   frontforkstrip.setPixelColor(trueIndex, color);
-  frontforkstrip.show();
+//  frontforkstrip.show();
   
 }
 
-#define TESTWAIT 5
 
-void testFork() {
-  for(uint16_t i = 0; i < 18; i++) {
-    setForkFrontPixel(i, _GREEN);
-//    setHandlebarStripPixel(map(i, 0, 17, 0, 15), _GREEN);
-    if(i > 0) setForkFrontPixel(i-1, _BLACK);
-    delay(TESTWAIT);
+
+
+void setForkLeftTopPixel(int displayIndex, uint32_t color) {
+  int index_start = FORK_LEFT_TOP_INDEX;
+  int index_end = FORK_LEFT_TOP_INDEX + FORK_TOP_LENGTH;
+
+  for(int i = index_start; i < index_end; i++) {
+    frontforkstrip.setPixelColor(i, color);
   }
-
-
-  
-  uint16_t idx = 0;
-  for(uint16_t y = 0; y < 18; y++) {
-    idx = 17-y;
-    setForkFrontPixel(idx, _GREEN);
-//    setHandlebarStripPixel(map(y, 0, 17, 0, 15), _RED);
-    setForkFrontPixel(idx+1, _BLACK);
-    delay(TESTWAIT);
-  }
-
-  
-}
-
-void testForkScroll() {
-
-  setForkRightTop(_RED);
-  setForkLeftTop(_RED);
-  delay(WAITTIME);
-  setForkRightTop(_BLACK);
-  setForkLeftTop(_BLACK);
-
-  setForkRightSide(_RED);
-  setForkLeftSide(_RED);
-  delay(WAITTIME);
-  setForkRightSide(_BLACK);
-  setForkLeftSide(_BLACK);
-
-  setForkRightBottom(_RED);
-  setForkLeftBottom(_RED);
-  delay(WAITTIME);
-  setForkRightBottom(_BLACK);
-  setForkLeftBottom(_BLACK);
-
-  setForkRightFront(_RED);
-  setForkLeftFront(_RED);
-  delay(WAITTIME);
-  setForkRightFront(_BLACK);
-  setForkLeftFront(_BLACK);
-  
-}
-
-void testForkAreas() {
-  setForkRightTop(_RED);
-  delay(WAITTIME);
-  setForkRightTop(_BLACK);
-
-  setForkRightSide(_RED);
-  delay(WAITTIME);
-  setForkRightSide(_BLACK);
-
-  setForkRightBottom(_RED);
-  delay(WAITTIME);
-  setForkRightBottom(_BLACK);
-
-  setForkRightFront(_RED);
-  delay(WAITTIME);
-  setForkRightFront(_BLACK);
-
-
-  setForkLeftTop(_RED);
-  delay(WAITTIME);
-  setForkLeftTop(_BLACK);
-
-  setForkLeftSide(_RED);
-  delay(WAITTIME);
-  setForkLeftSide(_BLACK);
-
-  setForkLeftBottom(_RED);
-  delay(WAITTIME);
-  setForkLeftBottom(_BLACK);
-
-  setForkLeftFront(_RED);
-  delay(WAITTIME);
-  setForkLeftFront(_BLACK);
-
-  
-
-  
-}
-
-
-
-void setForkLeftTopPixel(uint16_t displayIndex, uint32_t color) {
-  uint16_t index_start = FORK_LEFT_TOP_INDEX;
-  uint16_t index_end = FORK_LEFT_TOP_INDEX + FORK_TOP_LENGTH;
-
-  uint16_t dIndex = 0;
-  for(uint16_t i = index_start; i < index_end; i++) {
-    uint32_t c = (displayIndex < dIndex++) ? color : _BLACK;
-    frontforkstrip.setPixelColor(i, c);
-  }
-  frontforkstrip.show();
+//  frontforkstrip.show();
 }
 
 void setForkRightTopPixel(uint16_t displayIndex, uint32_t color) {
   uint16_t index_start = FORK_RIGHT_TOP_INDEX;
   uint16_t index_end = FORK_RIGHT_TOP_INDEX + FORK_TOP_LENGTH;
 
-  uint16_t dIndex = 0;
   for(uint16_t i = index_start; i < index_end; i++) {
-    uint32_t c = (displayIndex < dIndex++) ? color : _BLACK;
-    frontforkstrip.setPixelColor(i, c);
+    frontforkstrip.setPixelColor(i, color);
   }
-  frontforkstrip.show();
+//  frontforkstrip.show();
 }
 
 
@@ -514,6 +725,14 @@ void setForkLeftFront(uint32_t color) {
 }
 
 
+
+
+/**************************************************************
+ * 
+ *  Handlebar Front Circle
+ * 
+ *************************************************************/
+
 void setHandlebarCircleLeftPixel(uint16_t index, uint32_t color) {
   // Need to map left/right logic
 }
@@ -522,21 +741,55 @@ void setHandlebarCircleRightPixel(uint16_t index, uint32_t color) {
   
 }
 
-//
-//void setHandlebarCircle(uint32_t color) {
-//  for(uint16_t i=0; i<handlebarcircle.numPixels(); i++) {
-//    handlebarcircle.setPixelColor(i, color);
-//  }
-//
-////  handlebarcircle.show();
-//}
 
-//void setHandlebarCirclePixel(uint16_t index, uint32_t color) {
-//  handlebarcircle.setPixelColor(index, color);
-//
-//  handlebarcircle.show();
-//}
+void setHandlebarCircleAllPixels(uint32_t color) {
+  for(uint16_t i=0; i<handlebarcircle.numPixels(); i++) {
+    handlebarcircle.setPixelColor(i, color);
+  }
 
+  handlebarcircle.show();
+}
+
+uint32_t frontCircleWheelColors[16];
+
+void initializeColorWheel() {
+  
+  int thisColor[3];
+  
+  for(int i=0; i< 16; i++) {
+    HSVtoRGB(map(i, 0, 15, 0, 240), 255, 255, thisColor);
+    frontCircleWheelColors[i] = handlebarcircle.Color(thisColor[0],thisColor[1],thisColor[2]);
+  }
+}
+
+int cycleFrontCircleRainbowPosition = 0;
+void cycleFrontCircleRainbow() {
+  
+  int colorWheelIndex;
+  for(uint16_t i=0; i<16; i++) {
+    colorWheelIndex = i + cycleFrontCircleRainbowPosition;
+    if(colorWheelIndex > 15) colorWheelIndex = 0;
+    
+    handlebarcircle.setPixelColor(i, frontCircleWheelColors[colorWheelIndex]);
+  }
+
+  handlebarcircle.show();
+
+  cycleFrontCircleRainbowPosition++;
+  if(cycleFrontCircleRainbowPosition > 15) cycleFrontCircleRainbowPosition = 0;
+}
+
+void setHandlebarCirclePixel(uint16_t index, uint32_t color) {
+  handlebarcircle.setPixelColor(index, color);
+
+  handlebarcircle.show();
+}
+
+/**************************************************************
+ * 
+ *  Handlebar Front Strips
+ * 
+ *************************************************************/
 
 void setHandlebarStrip(uint32_t color) {
   setHandlebarStripRight(color);
@@ -564,14 +817,20 @@ void setHandlebarStripPixel(uint16_t index, uint32_t color) {
 
 void setHandlebarStripRightPixel(uint16_t index, uint32_t color) {
   handlebarstrip.setPixelColor(index, color);
-  handlebarstrip.show();
+
 }
 
 void setHandlebarStripLeftPixel(uint16_t index, uint32_t color) {
   handlebarstrip.setPixelColor((31 - index), color);
-  handlebarstrip.show();
+
 }
 
+
+/**************************************************************
+ * 
+ *  Audio Utility
+ * 
+ *************************************************************/
 
 void readSpectrum() {
   //reset the data
@@ -604,11 +863,31 @@ uint32_t getColorFromValue(int powerValue, boolean isRGBW) {
   }
 }
 
+/**************************************************************
+ * 
+ *  NeoPixel Utility
+ * 
+ *************************************************************/
+
+uint32_t Wheel(byte WheelPos) {
+  WheelPos = 255 - WheelPos;
+  if(WheelPos < 85) {
+    return megaMatrix.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  }
+  if(WheelPos < 170) {
+    WheelPos -= 85;
+    return megaMatrix.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  }
+  WheelPos -= 170;
+  return megaMatrix.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
 
 void clearAll() {
   frontforkstrip.clear();
   handlebarstrip.clear();
-//  handlebarcircle.clear();
+  if(useFrontCircle) {
+    handlebarcircle.clear();
+  }
 
 }
 
@@ -633,6 +912,96 @@ void fadeOff(uint16_t wait) {
   }
 }
 
+
+
+void rainbow_fade(int idelay) { //-FADE ALL LEDS THROUGH HSV RAINBOW
+    ihue++;
+    if (ihue >= 359) {ihue = 0;}
+    int thisColor[3];
+    HSVtoRGB(ihue, 255, 255, thisColor);
+    for(int idex = 0 ; idex < megaMatrix.numPixels(); idex++ ) {
+      megaMatrix.setPixelColor(idex,thisColor[0],thisColor[1],thisColor[2]); 
+    }
+    megaMatrix.show();    
+    delay(idelay);
+}
+
+
+//void flame(int topIndex) {
+//  int acolor[3];
+//  int idelay = random(0,35);
+//  
+//  float hmin = 0.1; float hmax = 45.0;
+//  float hdif = hmax-hmin;
+//  int randtemp = random(0,3);
+//  float hinc = (hdif/float(topIndex))+randtemp;
+//
+//  int ahue = hmin;
+//  for(int i = 0; i < topIndex; i++ ) {
+//    
+//    ahue = ahue + hinc;
+//
+//    HSVtoRGB(ahue, 255, 255, acolor);
+//    
+//    leds[i].r = acolor[0]; leds[i].g = acolor[1]; leds[i].b = acolor[2];
+//    int ih = horizontal_index(i);
+//    leds[ih].r = acolor[0]; leds[ih].g = acolor[1]; leds[ih].b = acolor[2];
+//    
+//    leds[TOP_INDEX].r = 255; leds[TOP_INDEX].g = 255; leds[TOP_INDEX].b = 255;
+//  
+//    megaMatrix.show();
+//    delay(idelay);
+//  }
+//}
+
+
+void HSVtoRGB(int hue, int sat, int val, int colors[3]) {
+  // hue: 0-359, sat: 0-255, val (lightness): 0-255
+  int r, g, b, base;
+
+  if (sat == 0) { // Achromatic color (gray).
+    colors[0]=val;
+    colors[1]=val;
+    colors[2]=val;
+  } else  {
+    base = ((255 - sat) * val)>>8;
+    switch(hue/60) {
+      case 0:
+        r = val;
+        g = (((val-base)*hue)/60)+base;
+        b = base;
+        break;
+      case 1:
+        r = (((val-base)*(60-(hue%60)))/60)+base;
+        g = val;
+        b = base;
+        break;
+      case 2:
+        r = base;
+        g = val;
+        b = (((val-base)*(hue%60))/60)+base;
+        break;
+      case 3:
+        r = base;
+        g = (((val-base)*(60-(hue%60)))/60)+base;
+        b = val;
+        break;
+      case 4:
+        r = (((val-base)*(hue%60))/60)+base;
+        g = base;
+        b = val;
+        break;
+      case 5:
+        r = val;
+        g = base;
+        b = (((val-base)*(60-(hue%60)))/60)+base;
+        break;
+    }
+    colors[0]=r;
+    colors[1]=g;
+    colors[2]=b;
+  }
+}
 
 
 
