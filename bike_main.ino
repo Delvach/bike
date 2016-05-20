@@ -78,6 +78,8 @@ Adafruit_NeoMatrix megaMatrix = Adafruit_NeoMatrix(32, 8, MEGAMATRIX_PIN,  NEO_M
 
 int colStr = 191;
 
+uint32_t wheelColorsRGBW[16];
+
 /* COLOR DEFINITIONS */
 const uint16_t rgb_colors[] = {
   megaMatrix.Color(colStr, 0, 0),
@@ -150,7 +152,8 @@ int isat = 0;        //-SATURATION (0-255)
 
 int ledsX[256][3];
 
-
+uint32_t frontCircleWheelColors[16];
+int cycleFrontCircleRainbowPosition = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -193,7 +196,7 @@ void setup() {
   setForkLeftBottom(frontforkstrip.Color(0, 0, 0, 255));
 
 //  setHandlebarStrip(_PURPLE);
-  if(useFrontCircle) {
+  if(false && useFrontCircle) {
     setHandlebarCircleAllPixels(handlebarcircle.Color(COLOR_STRENGTH, 0, COLOR_STRENGTH));
   }
 
@@ -204,6 +207,28 @@ void setup() {
 
 //  FrontFork_Animation.start(1);
   initializeColorWheel();
+
+  uint32_t tempColor;
+  for(int index = 0; index < FORK_TOP_LENGTH; index++) {
+//    tempColor = wheelColorsRGBW[map(index, 0, FORK_TOP_LENGTH-1, 0, 15)];
+    tempColor = frontforkstrip.Color(64, 32, 0, 0);
+    setForkLeftTopPixel(index, tempColor);
+    setForkRightTopPixel(index, tempColor);
+    
+  }
+//    if(index < leftValue) {
+//      leftColor = _GREEN;
+//    } else {
+//      leftColor = _BLACK;
+//    }
+//    if(index < rightValue) {
+//      rightColor = _GREEN;
+//    } else {
+//      rightColor = _BLACK;
+//    }
+//    setForkLeftTopPixel(index, leftColor);
+//    setForkRightTopPixel(index, rightColor);
+//  }
 }
 
 int x    = megaMatrix.width();
@@ -231,6 +256,7 @@ void loop() {
      case 1:
         if(use_audio) {
           updateMegaMatrixWithAudio();
+          updateTopForksWithAudio();
           updateFrontForksWithAudio();
           delay(msDelaySpectrumUpdate);
         }
@@ -270,7 +296,7 @@ void loop() {
   unsigned long timeDiff = millis() - timeCurrent;
   timeCurrent = millis();
 
-  if((millis() - timeLastCircleEvent) >= timeBetweenCircleEvents) {
+  if((millis() - timeLastCircleEvent) >= timeBetweenCircleEvents || true) {
     
     // Trigger circle event
     cycleFrontCircleRainbow();
@@ -286,7 +312,10 @@ void loop() {
     timeLastCircleEvent = millis();
   }
   
-
+  
+  
+  frontforkstrip.show();
+  handlebarstrip.show();
   
   
 }
@@ -344,36 +373,8 @@ void sparkle() {
 }
 
 
-void setSpectrum_handlebarLeft(int value1, int value2) {
-  int index = getNumLEDsFromValue(value1, HANDLEBAR_LENGTH);
-  
-  byte i;
-  for(i = 0; i < HANDLEBAR_LENGTH; i++) {
-    uint32_t color = i <= index ? _RED : _BLACK;
-    setHandlebarStripLeftPixel(i, color);
-  }
-}
-
-void setSpectrum_handlebarRight(int value1, int value2) {
-  int index = getNumLEDsFromValue(value1, HANDLEBAR_LENGTH);
-  
-  byte i;
-  for(i = 0; i < HANDLEBAR_LENGTH; i++) {
-    uint32_t color = i <= index ? _RED : _BLACK;
-    setHandlebarStripRightPixel(i, color);
-  }
-}
 
 
-void setSpectrum_circleLeft(int value) {
-  int index = getNumLEDsFromValue(value, HANDLBAR_CIRCLE_LENGTH);
-
-  byte i;
-  for(i = 0; i < HANDLBAR_CIRCLE_LENGTH; i++) {
-    uint32_t color = i < index ? _GREEN : _BLACK;
-    setHandlebarCircleLeftPixel(i, color);
-  }
-}
 
 
 /**************************************************************
@@ -381,30 +382,38 @@ void setSpectrum_circleLeft(int value) {
  *  Spectrum Analyzer & LED integration 
  *  v0.2 - Audio to MegaMatrix
  *  
- *  
- *  void setSpectrum_forkFrontLeft(int value1, int value2) {
-  int index = getNumLEDsFromValue(value1, FORK_FRONT_LENGTH);
-  
-  byte i;
-  for(i = 0; i < FORK_FRONT_LENGTH; i++) {
-    uint32_t color = i < index ? _PURPLE : _BLACK;
-    setForkLeftFrontPixel(i, color);
-  }
-}
-
-void setSpectrum_forkFrontRight(int value1, int value2) {
-  int index = getNumLEDsFromValue(value1, FORK_FRONT_LENGTH);
-  
-  byte i;
-  for(i = 0; i < FORK_FRONT_LENGTH; i++) {
-    uint32_t color = i < index ? _PURPLE : _BLACK;
-    setForkRightFrontPixel(i, color);
-  }
-}
-
+ * 
  *  
  * 
  *************************************************************/
+
+void updateTopForksWithAudio() {
+  int leftValue, rightValue, index;
+  uint32_t leftColor, rightColor;
+
+
+  leftValue = map(left[2], MINPOWER, MAXPOWER, 0, FORK_TOP_LENGTH);
+  rightValue = map(right[2], MINPOWER, MAXPOWER, 0, FORK_TOP_LENGTH);
+  
+
+  for(index = 0; index < FORK_TOP_LENGTH; index++) {
+    if(index < leftValue) {
+      leftColor = _GREEN;
+    } else {
+      leftColor = _BLACK;
+    }
+    if(index < rightValue) {
+      rightColor = _GREEN;
+    } else {
+      rightColor = _BLACK;
+    }
+    setForkLeftTopPixel(index, leftColor);
+    setForkRightTopPixel(index, rightColor);
+  }
+
+
+  
+}
 
 void updateFrontForksWithAudio() {
   int leftValue, rightValue, index;
@@ -435,27 +444,14 @@ void updateFrontForksWithAudio() {
   rightValue = map(right[5], MINPOWER, MAXPOWER, 0, HANDLEBAR_LENGTH);
   
   for(index = 0; index < HANDLEBAR_LENGTH; index++) {
-    leftColor = index < leftValue ? rgbw_white : _BLACK;
-    rightColor = index < rightValue ? rgbw_white : _BLACK;
+    leftColor = index < leftValue ? rgbw_blue : _BLACK;
+    rightColor = index < rightValue ? rgbw_blue : _BLACK;
     setHandlebarStripLeftPixel(index, leftColor);
     setHandlebarStripRightPixel(index, rightColor);
   }
 
   
 
-  leftValue = map(left[0], MINPOWER, MAXPOWER, 0, FORK_TOP_LENGTH);
-  rightValue = map(right[0], MINPOWER, MAXPOWER, 0, FORK_TOP_LENGTH);
-  
-
-  for(index = 0; index < FORK_TOP_LENGTH; index++) {
-    leftColor = index < leftValue ? _GREEN : _BLACK;
-    rightColor = index < rightValue ? _RED : _BLACK;
-    setForkLeftTopPixel(FORK_TOP_LENGTH-index, leftColor);
-    setForkRightTopPixel(FORK_TOP_LENGTH-index, rightColor);
-  }
-  
-  frontforkstrip.show();
-  handlebarstrip.show();
 
   
 }
@@ -750,7 +746,7 @@ void setHandlebarCircleAllPixels(uint32_t color) {
   handlebarcircle.show();
 }
 
-uint32_t frontCircleWheelColors[16];
+
 
 void initializeColorWheel() {
   
@@ -759,16 +755,17 @@ void initializeColorWheel() {
   for(int i=0; i< 16; i++) {
     HSVtoRGB(map(i, 0, 15, 0, 240), 255, 255, thisColor);
     frontCircleWheelColors[i] = handlebarcircle.Color(thisColor[0],thisColor[1],thisColor[2]);
+    wheelColorsRGBW[i] = frontforkstrip.Color(thisColor[0],thisColor[1],thisColor[2], 0);
   }
 }
 
-int cycleFrontCircleRainbowPosition = 0;
+
 void cycleFrontCircleRainbow() {
   
   int colorWheelIndex;
   for(uint16_t i=0; i<16; i++) {
     colorWheelIndex = i + cycleFrontCircleRainbowPosition;
-    if(colorWheelIndex > 15) colorWheelIndex = 0;
+    if(colorWheelIndex > 15) colorWheelIndex = colorWheelIndex-15;
     
     handlebarcircle.setPixelColor(i, frontCircleWheelColors[colorWheelIndex]);
   }
