@@ -1,5 +1,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_NeoPixel.h>
+#include <AltSoftSerial.h>
+#include <wavTrigger.h>
 #ifdef __AVR__
   #include <avr/power.h>
 #endif
@@ -20,7 +22,7 @@
 #define BACK_LIGHT_PIN 7
 
 // Neopixels - handlebar circle (rgb 16-pixel circle)
-#define HANDLEBAR_CIRCLE_PIN 9
+#define HANDLEBAR_CIRCLE_PIN 12
 #define HANDLEBAR_CIRCLE_NUM 16
 
 // Neopixels - handlebar upper (rgbw strip)
@@ -32,8 +34,6 @@
 
 
 #define LWAIT    50
-
-#define MAX_BRIGHTNESS  15 // set max brightness
 
 
 // prototype light mapping
@@ -76,6 +76,12 @@ Adafruit_NeoMatrix backlightmatrix = Adafruit_NeoMatrix(8, 8, BACK_LIGHT_PIN,
 
 Adafruit_NeoMatrix megaMatrix = Adafruit_NeoMatrix(32, 8, MEGAMATRIX_PIN,  NEO_MATRIX_TOP + NEO_MATRIX_LEFT + NEO_MATRIX_COLUMNS + NEO_MATRIX_ZIGZAG, NEO_GRB + NEO_KHZ800);
 
+boolean useWavTrigger = true;
+
+
+wavTrigger wTrig;
+
+
 int colStr = 191;
 
 uint32_t wheelColorsRGBW[16];
@@ -110,15 +116,19 @@ boolean use_audio = true;
 int msDelaySpectrumUpdate = 5;
 boolean cycleColors = false;
 
+
+int MAX_BRIGHTNESS = 64; // set max brightness
+int MINPOWER = 128;
+int MAXPOWER = 1023;
+
 /*
  * 0 - default
  * 
  */
-byte mode = 1;
+int mode = 0;
 
 int COLOR_STRENGTH = 128;
-
-const int RGBW_STRENGTH = 64;
+int RGBW_STRENGTH = 64;
 uint32_t _RED = frontforkstrip.Color(COLOR_STRENGTH/2, 0, 0, 0);
 uint32_t _GREEN = frontforkstrip.Color(0, COLOR_STRENGTH, 0, 0);
 uint32_t _BLACK = frontforkstrip.Color(0, 0, 0, 0);
@@ -128,8 +138,7 @@ uint32_t _WHITE = frontforkstrip.Color(0, 0, 0, COLOR_STRENGTH);
 const uint32_t rgbw_blue = frontforkstrip.Color(0, 0, COLOR_STRENGTH, 0);
 const uint32_t rgbw_white = frontforkstrip.Color(0, 0, 0, RGBW_STRENGTH);
 
-#define MINPOWER 128
-#define MAXPOWER 1023
+
 
 #define TEXT_SCROLL_DELAY 25
 
@@ -157,6 +166,18 @@ int cycleFrontCircleRainbowPosition = 0;
 
 void setup() {
   Serial.begin(9600);
+  delay(50);
+  Serial2.begin(9600);
+  delay(50);
+
+  if(useWavTrigger) {
+    wTrig.start();
+    delay(50);
+//    wTrig.masterGain(-12);
+    delay(50);
+    wTrig.stopAllTracks();
+    delay(10);
+  }
   
   frontforkstrip.begin();
   frontforkstrip.setBrightness(MAX_BRIGHTNESS);
@@ -229,32 +250,80 @@ void setup() {
 //    setForkLeftTopPixel(index, leftColor);
 //    setForkRightTopPixel(index, rightColor);
 //  }
+Serial.println("ready");
+delay(50);
+
+megaMatrix.drawPixel(0, 0, megaMatrix.Color(64, 0, 0));
+megaMatrix.show();
+delay(2000);
+wTrig.trackPlaySolo(1);
+
 }
+
+boolean notyet = true;
 
 int x    = megaMatrix.width();
 int pass = 0;
 
 void loop() {
+
+
+
+  if(Serial2.available() > 0) {
+      int command = Serial2.readStringUntil(';').toInt();
+      int value = Serial2.readStringUntil('\n').toInt();
+Serial.println(command);
+Serial.println(value);      
+
+      switch(command) {
+        case 0:
+          Serial.println("Setting max brightness");
+          Serial.println(value);
+          MAX_BRIGHTNESS = value;
+          COLOR_STRENGTH = value;
+          RGBW_STRENGTH = value;
+          megaMatrix.setBrightness(MAX_BRIGHTNESS);
+          frontforkstrip.setBrightness(MAX_BRIGHTNESS);
+          backlightmatrix.setBrightness(MAX_BRIGHTNESS);
+          handlebarcircle.setBrightness(MAX_BRIGHTNESS);
+          handlebarstrip.setBrightness(MAX_BRIGHTNESS);
+          
+          break;
+        case 1:
+          Serial.println("Setting min audio level");
+          Serial.println(value);
+          MINPOWER = value;
+          break;
+        case 2:
+          Serial.println("Setting max audio level");
+          Serial.println(value);
+          MAXPOWER = value;
+          break;
+        case 3:
+          Serial.println("Setting mode");
+          Serial.println(value);
+          mode = value;
+          break;
+        case 4:
+          Serial.println("Action");
+          Serial.println(value);
+          takeActionByIndex(value);
+          break;
+        case 5:
+          Serial.println("Turbine Action");
+          Serial.println(value);
+          turbineAction(value);
+          break;
+      }
+  }
+
+  
   if(use_audio) readSpectrum();
 
   switch(mode) {
-    case 0: default:
-      if(use_audio) {
-//        setSpectrum_handlebarLeft(left[1], left[1]);
-//        setSpectrum_forkFrontLeft(left[2], left[3]);
-//        setSpectrum_forkSideLeft(left[4], left[5]);
-//        setSpectrum_forkTopLeft(left[5]);
-//      
-//        setSpectrum_handlebarRight(right[1], right[1]);
-//        setSpectrum_forkFrontRight(right[2], right[3]);
-//        setSpectrum_forkSideRight(right[4], right[5]);
-//        setSpectrum_forkTopRight(right[5]);
-      }
-      
-      break;
-
-     case 1:
+     case 0:
         if(use_audio) {
+//          Serial.println(left[3]);
           updateMegaMatrixWithAudio();
           updateTopForksWithAudio();
           updateFrontForksWithAudio();
@@ -262,7 +331,9 @@ void loop() {
         }
         break;
 
-      case 2:
+
+
+      case 1:
         megaMatrix.fillScreen(0);
         megaMatrix.setCursor(x, 0);
         megaMatrix.print(F("Happy Thursday"));
@@ -274,7 +345,11 @@ void loop() {
         megaMatrix.show();
         delay(TEXT_SCROLL_DELAY);
 
-      break;
+        break;
+
+      case 2:
+        sparkle();
+        break;
 
       case 3:
         testMatrix();
@@ -285,7 +360,7 @@ void loop() {
         break;
 
       case 5:
-        sparkle();
+        
         break;
 
       case 6:
@@ -317,6 +392,14 @@ void loop() {
   frontforkstrip.show();
   handlebarstrip.show();
   
+  
+}
+
+void takeActionByIndex(int index) {
+  
+}
+
+void turbineAction(int index) {
   
 }
 
